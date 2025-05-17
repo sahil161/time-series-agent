@@ -51,59 +51,38 @@ if uploaded_file:
     if user_prompt:
         # Compose system message with context info
         system_msg = f"""
-        You are a time series data analyst. You are working with a DataFrame named `df_agent`, which contains:
-        - A time column: '{time_col}'
-        - Key columns: {key_cols}
-        - A target column: '{target_col}'
-
-        Your tasks:
-        1. Always group the data by the time column and key columns, aggregating the target column using `.sum()`.
-        2. If the user asks for trends (e.g., 'plot trend for USA'), plot the time series of the target column after applying any filters.
-        3. If the user asks for a maximum/minimum/average (e.g., 'max sales in USA'), return only the numeric value using `.max()`, `.min()`, or `.mean()` accordingly.
-        4. Use `st.write()` to show numeric results, and `plt` for visualizations with `st.pyplot()`.
-        5. Apply filters (like 'USA' or 'Product A') after aggregation based on the appropriate key columns.
-        6. Do not include natural language explanations — return only Python code.
-
-        Assume `pandas as pd`, `matplotlib.pyplot as plt`, and `streamlit as st` are already imported.
-    """
-
+You are a time series data analyst. Given a DataFrame named df_agent with a time column '{time_col}', 
+key columns {key_cols}, and target column '{target_col}', generate Python code that fulfills the user's request.
+Return only Python code. Assume pandas, matplotlib.pyplot are already imported.
+"""
 
         try:
             response = client.chat.completions.create(
-                model="gpt-4.1-nano-2025-04-14",
+                model="gpt-4.1-nano-2025-04-14",  # or your preferred model
+                #model="gpt-4o-mini",  # or your preferred model
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_prompt}
                 ],
             )
-            generated_response = response.choices[0].message.content
-
-            # Extract python code from response
-            if "```python" in generated_response:
-                code_block = generated_response.split("```python")[1]
-                code = code_block.split("```")[0].strip()
-            elif "```" in generated_response:
-                code = generated_response.split("```")[1].strip()
-            else:
-                code = generated_response.strip()
-
-            st.code(code, language="python")
-
-            # If code contains matplotlib plot commands but no st.pyplot call, add it with explicit figure
-            if "plt" in code and "st.pyplot" not in code:
-                code += "\nst.pyplot(plt.gcf())\nplt.clf()"
-
-            # Execute the generated code - pass local_vars as globals for exec
+            generated_code = response.choices[0].message.content
+            st.code(generated_code, language="python")
+            
+            # Clean generated_code from markdown backticks
+            if generated_code.startswith("```"):
+                generated_code = "\n".join(generated_code.split("\n")[1:])
+            if generated_code.endswith("```"):
+                generated_code = "\n".join(generated_code.split("\n")[:-1])
+            
+            # Run the generated code safely
             local_vars = {
                 "df_agent": df_agent,
                 "pd": pd,
                 "plt": plt,
-                "st": st
             }
-            exec(code, local_vars)
+            exec(generated_code, {}, local_vars)
+            st.pyplot(plt)
+            plt.clf()
 
         except Exception as e:
             st.error(f"Error running generated code: {e}")
-
-
-
