@@ -1,4 +1,5 @@
 .streamlit/secrets.toml
 api_key_check.ipynb
 ~$sample_time_series.xlsx
+.DS_Store
 
