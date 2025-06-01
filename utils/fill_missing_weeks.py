@@ -3,39 +3,37 @@ from itertools import product
 import matplotlib.pyplot as plt
 import streamlit as st
 
-def fill_missing_weeks(df, date_col, target_col, key_cols):
-    # Ensure datetime format
-    df[date_col] = pd.to_datetime(df[date_col])
+# utils/fill_missing_weeks.py (rename to process_forecast_level.py or keep as is)
 
-    # Aggregate in case of duplicate keys for same week
-    df = df.groupby(key_cols + [date_col], as_index=False)[target_col].sum()
+def process_level(df, df_time, forecast_level, col_sales):
+    results = []
+    total_combinations = df[forecast_level].drop_duplicates().shape[0]
+    intersection_count = 0
 
-    filled_frames = []
+    grouped = df.groupby(forecast_level)
 
-    for key_vals, group_df in df.groupby(key_cols):
-        if not isinstance(key_vals, tuple):
-            key_vals = (key_vals,)
-        
-        # Determine date range for this key
-        min_date = group_df[date_col].min()
-        max_date = group_df[date_col].max()
-        full_weeks = pd.date_range(start=min_date, end=max_date, freq='W-SUN')
+    for keys, group in grouped:
+        if not isinstance(keys, tuple):
+            keys = (keys,)
 
-        # Create full frame
-        temp_df = pd.DataFrame({date_col: full_weeks})
-        for col, val in zip(key_cols, key_vals):
-            temp_df[col] = val
-        temp_df[target_col] = 0  # initialize with 0 sales
+        merged_group = pd.merge(df_time, group, on='Time.[Week]', how='left')
 
-        # Merge actual data
-        merged = pd.merge(temp_df, group_df, on=key_cols + [date_col], how='left', suffixes=('_fill', ''))
-        merged[target_col] = merged[target_col].fillna(merged[f"{target_col}_fill"])
-        merged = merged.drop(columns=[f"{target_col}_fill"])
+        for col, key in zip(forecast_level, keys):
+            merged_group[col] = key
 
-        filled_frames.append(merged)
+        merged_group.fillna(0, inplace=True)
+        merged_group[col_sales] = merged_group[col_sales].clip(lower=0)
 
-    df_filled = pd.concat(filled_frames, ignore_index=True)
-    return df_filled
+        merged_group.sort_values(by='Time.[Week]', inplace=True)
+        merged_group['Cumulative Sum'] = merged_group[col_sales].cumsum()
+        filtered_group = merged_group[merged_group['Cumulative Sum'] != 0].drop(columns=['Cumulative Sum'])
+
+        results.append(filtered_group)
+        intersection_count += 1
+        print(f'Processed {intersection_count}/{total_combinations}')
+
+    return pd.concat(results, ignore_index=True) if results else pd.DataFrame()
+
 
 
 
